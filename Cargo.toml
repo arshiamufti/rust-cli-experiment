@@ -1,0 +1,8 @@
+[package]
+name = "cli-project"
+version = "0.1.0"
+authors = ["arshiamufti <a2mufti@uwaterloo.ca>"]
+
+[dependencies.clap]
+version = "2.26.0"
+features = ["yaml"]
