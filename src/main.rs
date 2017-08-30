@@ -13,42 +13,37 @@ pub enum InputType {
     Error(io::Error),
 }
 
-fn get_size(path: &Path) -> InputType {
-    let md_result = fs::symlink_metadata(&path);
-    if let Err(e) = md_result {
-        return InputType::Error(e);
-    }
-    let md = md_result.unwrap();
+fn get_size(path: &Path) -> Result<InputType, io::Error> {
+    let md_result = fs::symlink_metadata(path);
+    let md = md_result?;
     if md.is_file() {
-        InputType::File(md.len())
+        Ok(InputType::File(md.len()))
     } else if md.is_dir() {
         let cwd = env::current_dir().unwrap();
         let name = PathBuf::from(path);
         let change_dir_res = env::set_current_dir(&name);
         if let Err(e) = change_dir_res {
-            return InputType::Error(e);
+            return Ok(InputType::Error(e));
         }
-        let ls_res = fs::read_dir(".");
-        if let Err(e) = ls_res {
-            return InputType::Error(e);
-        }
-        let ls = ls_res.unwrap();
+        let ls = fs::read_dir(".")?;
         let sizes = ls.map( |item| {
             let i = item.expect("couldn't unwrap a file/directory in $pwd");
             let res = get_size(i.path().as_path());
             //println!("name: {:?}", i.file_name());
             //println!("res: {:?}", res);
             match res {
-                InputType::File(s) => s,
-                InputType::Directory(s) => s,
-                InputType::Error(_) => 0
+                Ok(InputType::File(s)) => s,
+                Ok(InputType::Directory(s)) => s,
+                Ok(InputType::Error(_)) => 0,
+                Err(_) => 0
             }
         });
         let total_size = sizes.sum();
         assert!(env::set_current_dir(cwd).is_ok());
-        InputType::Directory(total_size)
+        Ok(InputType::Directory(total_size))
     } else {
-        InputType::Error(io::Error::new(io::ErrorKind::Other, "metadata is neither a file nor directory, ignoring..."))
+        Ok(InputType::Error(
+            io::Error::new(io::ErrorKind::Other, "metadata is neither a file nor directory, ignoring...")))
     }
 }
 
@@ -72,8 +67,9 @@ fn main() {
     let res = get_size(&p);
     println!("Input: {}", input);
     match res {
-        InputType::File(s) => println!("the input is a file of {} bytes", s),
-        InputType::Directory(s) => println!("the input is a directory of {} bytes", s),
-        InputType::Error(e) => println!("oh no! {}", e)
+        Ok(InputType::File(s)) => println!("the input is a file of {} bytes", s),
+        Ok(InputType::Directory(s)) => println!("the input is a directory of {} bytes", s),
+        Ok(InputType::Error(e)) => println!("oh no! {}", e),
+        Err(e) => println!("an error occured! {}", e)
     }
 }
