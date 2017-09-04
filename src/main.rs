@@ -1,48 +1,50 @@
+// implements the same things using walkdir
+
 extern crate clap;
+extern crate walkdir;
 use clap::{App, Arg};
 use std::path::Path;
-use std::path::PathBuf;
+use walkdir::{WalkDir, DirEntry};
 use std::fs;
 use std::io;
-use std::env;
+use walkdir::WalkDirIterator;
 
 #[derive(Debug)]
 pub enum InputType {
     File(u64),
     Directory(u64),
-    Error(io::Error),
+}
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry.file_name()
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
 }
 
 fn get_size(path: &Path) -> Result<InputType, io::Error> {
-    let md = fs::symlink_metadata(path)?;
+    let md = fs::symlink_metadata(path).unwrap();
     if md.is_file() {
-        Ok(InputType::File(md.len()))
-    } else if md.is_dir() {
-        let cwd = env::current_dir().unwrap();
-        let name = PathBuf::from(path);
-        let change_dir_res = env::set_current_dir(&name);
-        if let Err(e) = change_dir_res {
-            return Ok(InputType::Error(e));
+       Ok(InputType::File(md.len()))
+    }
+    else if md.is_dir() {
+        let mut sum: u64 = 0;
+        let walker = WalkDir::new(path).max_depth(1).min_depth(1).into_iter();
+        for entry in walker.filter_entry(|e| !is_hidden(e)) {
+                      let entry = entry.unwrap();
+                      let path = entry.path();
+                      //println!("path: {:?}", path);
+                      let size = match get_size(path) {
+                          Ok(InputType::File(s)) => s,
+                          Ok(InputType::Directory(s)) => s,
+                          Err(_) => 0
+                      };
+                      sum = sum + size;
         }
-        let ls = fs::read_dir(".")?;
-        let sizes = ls.map( |item| {
-            let i = item.expect("couldn't unwrap a file/directory in $pwd");
-            let res = get_size(i.path().as_path());
-            //println!("name: {:?}", i.file_name());
-            //println!("res: {:?}", res);
-            match res {
-                Ok(InputType::File(s)) => s,
-                Ok(InputType::Directory(s)) => s,
-                Ok(InputType::Error(_)) => 0,
-                Err(_) => 0
-            }
-        });
-        let total_size = sizes.sum();
-        assert!(env::set_current_dir(cwd).is_ok());
-        Ok(InputType::Directory(total_size))
-    } else {
-        Ok(InputType::Error(
-            io::Error::new(io::ErrorKind::Other, "metadata is neither a file nor directory, ignoring...")))
+        Ok(InputType::Directory(sum))
+    }
+    else {
+        Err(io::Error::new(io::ErrorKind::Other, "the specified path is neither a file nor directory..."))
     }
 }
 
@@ -67,7 +69,6 @@ fn main() {
     match res {
         Ok(InputType::File(s)) => println!("the input is a file of {} bytes", s),
         Ok(InputType::Directory(s)) => println!("the input is a directory of {} bytes", s),
-        Ok(InputType::Error(e)) => println!("oh no! {}", e),
         Err(e) => println!("an error occured! {}", e)
     }
 }
