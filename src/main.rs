@@ -14,8 +14,7 @@ pub enum InputType {
 }
 
 fn get_size(path: &Path) -> Result<InputType, io::Error> {
-    let md_result = fs::symlink_metadata(path);
-    let md = md_result?;
+    let md = fs::symlink_metadata(path)?;
     if md.is_file() {
         Ok(InputType::File(md.len()))
     } else if md.is_dir() {
@@ -48,7 +47,6 @@ fn get_size(path: &Path) -> Result<InputType, io::Error> {
 }
 
 fn main() {
-
     let matches = App::new("size-rs")
         .version("1.0")
         .author("arshia")
